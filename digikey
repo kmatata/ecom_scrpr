@@ -12,8 +12,7 @@ sh = gc.open("GS1") # <----PLACE GOOGLESHEETS FILE WITH WEBPAGE URL'S HERE
 sheet_inst = sh[2]
 sku = pd.DataFrame(sheet_inst.get_all_values())
 sku = sku[0].head(1000).tolist()
-#API_KEY = '622e7817a6141830a389e721'
-API_KEY = '9a4db5e41799f474e4f682ff5f5f3064'
+
 #pages = pd.read_excel('fetch for digikey.xlsx',sheet_name='Sheet1')
 #sku = pages['urls'].head(2).to_list()
 digiky = {'SKU': [], 'Stock': [], 'qtty': [], 'prices': []}
@@ -26,16 +25,13 @@ def mine_sku_data():
         for _ in range(15):
             try:
                 r = requests.get(
-                    f"https://api.scrapingdog.com/scrape?api_key=622e7817a6141830a389e721&url={sk}&wait=5000")
-                #r = requests.get(
-                #    f"http://api.scraperapi.com?api_key={API_KEY}&url={sk}&wait=20000&render=true&country_code=us&premium=true")
+                    f"https://api.scrapingdog.com/scrape?api_key=PUT API KEY HERE&url={sk}&wait=5000")
                 if r.status_code in [200]:
                     ## escape for loop if the API returns a successful response
                     break
             except requests.exceptions.ConnectionError:
                 r = ''
         if r.status_code == 200:
-            # r = requests.get(f'https://api.scrapingdog.com/scrape?api_key=621e862d83029a0def7bb7cc&url={sk}&country=us&premium=true').text
             soup = BeautifulSoup(r.text, 'lxml')
             time.sleep(4)
             try:
