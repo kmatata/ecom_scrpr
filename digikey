@@ -1,0 +1,131 @@
+import time
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import pygsheets
+from datetime import datetime
+
+gc = pygsheets.authorize(service_file='credentials_2.json')
+sh = gc.open("GS1") # <----PLACE GOOGLESHEETS FILE WITH WEBPAGE URL'S HERE
+
+
+sheet_inst = sh[2]
+sku = pd.DataFrame(sheet_inst.get_all_values())
+sku = sku[0].head(1000).tolist()
+#API_KEY = '622e7817a6141830a389e721'
+API_KEY = '9a4db5e41799f474e4f682ff5f5f3064'
+#pages = pd.read_excel('fetch for digikey.xlsx',sheet_name='Sheet1')
+#sku = pages['urls'].head(2).to_list()
+digiky = {'SKU': [], 'Stock': [], 'qtty': [], 'prices': []}
+def mine_sku_data():
+    prc = []
+    qty = []
+    for sk in sku:
+        pr = []
+        qt = []
+        for _ in range(15):
+            try:
+                r = requests.get(
+                    f"https://api.scrapingdog.com/scrape?api_key=622e7817a6141830a389e721&url={sk}&wait=5000")
+                #r = requests.get(
+                #    f"http://api.scraperapi.com?api_key={API_KEY}&url={sk}&wait=20000&render=true&country_code=us&premium=true")
+                if r.status_code in [200]:
+                    ## escape for loop if the API returns a successful response
+                    break
+            except requests.exceptions.ConnectionError:
+                r = ''
+        if r.status_code == 200:
+            # r = requests.get(f'https://api.scrapingdog.com/scrape?api_key=621e862d83029a0def7bb7cc&url={sk}&country=us&premium=true').text
+            soup = BeautifulSoup(r.text, 'lxml')
+            time.sleep(4)
+            try:
+                table1 = soup.find('table', class_='MuiTable-root')
+                header = table1.find('th', class_='MuiTableCell-root')
+                skeeper = header.find('h1').text.strip()
+                digiky['SKU'].append(skeeper)
+            except:
+                digiky['SKU'].append(None)
+            #time.sleep(8)
+            try:
+                proc_tble = soup.find('div', attrs={'data-testid': 'price-and-procure-title'}).div.span.text
+                digiky['Stock'].append(proc_tble)
+            except:
+                digiky['Stock'].append(None)
+            time.sleep(1)
+            try:
+                table2 = soup.find('div', attrs={'data-evg': 'priced-in'}).find('table')
+                try:
+                    rows = table2.find('tbody', class_='MuiTableBody-root').find_all('tr')
+                    for row in rows:
+                        tdata = row.find_all('td')
+                        qtty = tdata[0].text
+                        qt.append(qtty)
+                        prices = tdata[1].text
+                        pr.append(prices)
+                except:
+                    qt.append(None)
+                    pr.append(None)
+            except:
+                qt.append(None)
+                pr.append(None)
+        qty.append(qt)
+        prc.append(pr)
+        digiky['qtty'] = qty
+        digiky['prices'] = prc
+        print(digiky)
+        print(f'{sk}  DONE-->')
+    del qt
+    del pr
+    del qty
+    del prc
+
+if __name__ == "__main__":
+    while True:
+        start = time.time()
+        mine_sku_data()
+
+        pd.set_option('display.max_rows', 5000)
+        pd.set_option('display.max_columns', 500)
+        pd.set_option('display.width', 1000)
+
+        df_ecom = pd.DataFrame.from_dict(digiky, orient='index')
+        df_ecom = df_ecom.transpose()
+        df_ecom = df_ecom.mask(df_ecom.eq('None')).fillna(0)
+        df_cost = df_ecom['prices'].tolist()
+        df_cost = pd.DataFrame(df_cost, columns=['$val1', '$val2'
+            , '$val3', '$val4'
+            , '$val5', '$val6'
+            , '$val7', '$val8'])
+        df_cost = df_cost.mask(df_cost.eq('None')).fillna(0)
+        df_qty = df_ecom['qtty'].tolist()
+        df_qty = pd.DataFrame(df_qty, columns=['Qty1', 'Qty2'
+            , 'Qty3', 'Qty4'
+            , 'Qty5', 'Qty6'
+            , 'Qty7', 'Qty8'])
+        df_qty = df_qty.replace(r'Quote', 0, regex=True)
+        df_qty = df_qty.mask(df_qty.eq('None')).fillna(0)
+        df_ecom = pd.concat([df_ecom, df_cost, df_qty], axis=1)
+        df_ecom = df_ecom.drop('prices', axis=1)
+        df_ecom = df_ecom.drop('qtty', axis=1)
+        df_ecom = df_ecom.mask(df_ecom.eq('None')).fillna(0)
+        #print(df_ecom)
+
+        gc = pygsheets.authorize(service_file='credentials_2.json')
+
+        sh = gc.open("GS1") #<-----paste googlesheets to file here
+
+        wks = sh[4]
+        wks.set_dataframe(df_ecom,(1,1))
+        end = time.time()
+        diff = (end - start)/60
+        now = datetime.now()
+        dt_string = now.strftime('%d/%m %H:%M')
+        print(f'_Currnt: {dt_string}')
+        print('Time-lapsed:{:.1f}minutes'.format(diff))
+        print('CHECK GOOGLE SHEETS')
+        time_wait = 7200
+        print(f'waitin {time_wait} seconds...approx 5dys...')
+        time.sleep(time_wait * 60)
+        print('BEGINNING...')
+        del digiky
+        digiky = {'SKU': [], 'Stock': [], 'qtty': [], 'prices': []}
